@@ -45,7 +45,7 @@ export interface Payment {
   created_at: string;
 }
 
-/** Correspond à la vue SQL public.v_loans_with_balance */
+/** Correspond à la vue SQL creances.v_loans_with_balance */
 export interface LoanWithBalance {
   id: string;
   client_id: string;
@@ -62,6 +62,7 @@ export interface LoanWithBalance {
   is_due_today: boolean;
   created_at: string;
   updated_at: string;
+  organization_id: string;
 }
 
 export interface LoanWithPayments extends LoanWithBalance {

@@ -3,10 +3,10 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, Wallet, LogOut, Landmark, UserPlus, Settings, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Users, Wallet, LogOut, Landmark, UserPlus, Settings, ShieldCheck, Building2 } from "lucide-react";
 import { signOut } from "@/lib/actions";
 import { cn } from "@/lib/utils";
-import { canAccess, isAdminOrAbove } from "@/lib/auth-shared";
+import { canAccess, isAdminOrAbove, isSuperAdmin } from "@/lib/auth-shared";
 import { Organization, Profile } from "@/lib/types";
 
 interface SidebarProps {
@@ -23,6 +23,7 @@ const ROLE_LABELS: Record<string, string> = {
 export default function Sidebar({ organization, profile }: SidebarProps) {
   const pathname = usePathname();
   const admin = isAdminOrAbove(profile);
+  const superAdmin = isSuperAdmin(profile);
 
   const navItems = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, section: "dashboard" as const },
@@ -79,7 +80,7 @@ export default function Sidebar({ organization, profile }: SidebarProps) {
           );
         })}
 
-        {admin ? (
+        {admin && !superAdmin ? (
           <>
             <div className="mt-4 mb-1 px-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
               Administration
@@ -107,6 +108,26 @@ export default function Sidebar({ organization, profile }: SidebarProps) {
             >
               <Settings size={18} />
               Paramètres
+            </Link>
+          </>
+        ) : null}
+
+        {superAdmin ? (
+          <>
+            <div className="mt-4 mb-1 px-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+              Super Admin
+            </div>
+            <Link
+              href="/super-admin"
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
+                pathname.startsWith("/super-admin")
+                  ? "bg-brand-50 text-brand-700"
+                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+              )}
+            >
+              <Building2 size={18} />
+              Console Super Admin
             </Link>
           </>
         ) : null}

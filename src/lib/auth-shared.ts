@@ -7,6 +7,10 @@ export function isAdminOrAbove(profile: Pick<Profile, "role"> | null): boolean {
   return profile?.role === "admin" || profile?.role === "super_admin";
 }
 
+export function isSuperAdmin(profile: Pick<Profile, "role"> | null): boolean {
+  return profile?.role === "super_admin";
+}
+
 export function canAccess(
   profile: Pick<Profile, "role" | "permissions"> | null,
   section: "clients" | "loans" | "documents" | "dashboard",
