@@ -41,7 +41,10 @@ function PermissionCheckboxes({
             <input
               type="checkbox"
               name={`${section.key}_view`}
-              defaultChecked={defaultPermissions?.[section.key]?.view ?? section.key === "dashboard"}
+              defaultChecked={
+                defaultPermissions?.[section.key]?.view ??
+                (section.key === "dashboard" || section.key === "clients" || section.key === "loans")
+              }
               className="h-3.5 w-3.5 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
             />
             Voir
@@ -51,7 +54,10 @@ function PermissionCheckboxes({
               <input
                 type="checkbox"
                 name={`${section.key}_edit`}
-                defaultChecked={defaultPermissions?.[section.key]?.edit ?? false}
+                defaultChecked={
+                  defaultPermissions?.[section.key]?.edit ??
+                  (section.key === "clients" || section.key === "loans")
+                }
                 className="h-3.5 w-3.5 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
               />
               Modifier

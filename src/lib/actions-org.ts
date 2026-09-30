@@ -26,6 +26,9 @@ function mapAuthError(message: string): string {
   if (message.includes("Unable to validate email") || message.includes("invalid")) {
     return "Adresse email invalide.";
   }
+  if (message.toLowerCase().includes("rate limit")) {
+    return "Trop de tentatives d'inscription en peu de temps sur ce projet. Réessayez dans quelques minutes, ou contactez l'administrateur du système si le problème persiste.";
+  }
   return message;
 }
 
