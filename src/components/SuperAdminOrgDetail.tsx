@@ -7,8 +7,11 @@ import {
   ArrowLeft,
   Check,
   Copy,
+  KeyRound,
+  Link2,
   Loader2,
   Palette,
+  RefreshCw,
   Settings,
   ShieldCheck,
   Trash2,
@@ -18,6 +21,7 @@ import {
 } from "lucide-react";
 import { revokeInvitation, removeTeamMember, updateSupervisorPermissions } from "@/lib/actions-org";
 import {
+  createAdminAccountDirectly,
   createInvitationForOrg,
   updateMemberRoleAsSuperAdmin,
   updateOrganizationAsSuperAdmin,
@@ -165,6 +169,222 @@ function InviteForm({ orgId }: { orgId: string }) {
             {copied ? "Copié" : "Copier"}
           </button>
         </div>
+      )}
+    </div>
+  );
+}
+
+function generateRandomPassword(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+  let out = "";
+  for (let i = 0; i < 12; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  return out;
+}
+
+/**
+ * Enrôlement d'un administrateur : deux options au choix pour le super admin.
+ * "Lien rapide" réutilise le mécanisme d'invitation existant (fiable, déjà en
+ * prod) avec le rôle Administrateur pré-sélectionné. "Création directe" crée
+ * le compte immédiatement actif, sans lien à partager, mais nécessite que la
+ * clé service_role Supabase soit configurée côté serveur.
+ */
+function EnrollAdminCard({ orgId }: { orgId: string }) {
+  const [mode, setMode] = useState<"link" | "direct">("direct");
+
+  // --- Option "lien rapide" ---
+  const [linkLoading, setLinkLoading] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [link, setLink] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  async function handleQuickLink() {
+    setLinkLoading(true);
+    setLinkError(null);
+    setLink(null);
+    const fd = new FormData();
+    fd.set("role", "admin");
+    const result = await createInvitationForOrg(orgId, fd);
+    setLinkLoading(false);
+    if (!result.success || !result.token) {
+      setLinkError(result.error ?? "Erreur lors de la création de l'invitation.");
+      return;
+    }
+    setLink(`${window.location.origin}/join/${result.token}`);
+  }
+
+  function copyLink() {
+    if (!link) return;
+    navigator.clipboard.writeText(link).then(() => {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    });
+  }
+
+  // --- Option "création directe" ---
+  const [directLoading, setDirectLoading] = useState(false);
+  const [directError, setDirectError] = useState<string | null>(null);
+  const [created, setCreated] = useState<{ email: string; password: string } | null>(null);
+  const [password, setPassword] = useState("");
+  const [credsCopied, setCredsCopied] = useState(false);
+
+  async function handleDirectSubmit(formData: FormData) {
+    setDirectLoading(true);
+    setDirectError(null);
+    setCreated(null);
+    const result = await createAdminAccountDirectly(orgId, formData);
+    setDirectLoading(false);
+    if (!result.success || !result.email || !result.password) {
+      setDirectError(result.error ?? "Erreur lors de la création du compte.");
+      return;
+    }
+    setCreated({ email: result.email, password: result.password });
+    setPassword("");
+  }
+
+  function copyCreds() {
+    if (!created) return;
+    navigator.clipboard
+      .writeText(`Email : ${created.email}\nMot de passe : ${created.password}`)
+      .then(() => {
+        setCredsCopied(true);
+        setTimeout(() => setCredsCopied(false), 2000);
+      });
+  }
+
+  return (
+    <div className="card">
+      <div className="mb-4 flex items-center gap-2">
+        <UserPlus size={18} className="text-brand-600" />
+        <h2 className="text-sm font-semibold text-gray-900">Enrôler un administrateur</h2>
+      </div>
+
+      <div className="mb-4 flex items-center gap-1 rounded-lg bg-gray-50 p-1 text-sm">
+        <button
+          type="button"
+          onClick={() => setMode("direct")}
+          className={cn(
+            "flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 font-medium transition",
+            mode === "direct" ? "bg-white text-brand-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
+          )}
+        >
+          <KeyRound size={14} />
+          Création directe
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("link")}
+          className={cn(
+            "flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 font-medium transition",
+            mode === "link" ? "bg-white text-brand-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
+          )}
+        >
+          <Link2 size={14} />
+          Lien rapide
+        </button>
+      </div>
+
+      {mode === "direct" ? (
+        <>
+          <p className="mb-3 text-xs text-gray-500">
+            Le compte est créé et actif immédiatement, avec l&rsquo;email et le mot de passe que vous
+            choisissez ici — rien à confirmer côté destinataire.
+          </p>
+          <form action={handleDirectSubmit} className="space-y-3">
+            <div className="grid max-w-md grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label htmlFor="direct_full_name" className="label">
+                  Nom complet
+                </label>
+                <input id="direct_full_name" name="full_name" type="text" required className="input" />
+              </div>
+              <div className="col-span-2">
+                <label htmlFor="direct_email" className="label">
+                  Email
+                </label>
+                <input id="direct_email" name="email" type="email" required className="input" />
+              </div>
+              <div className="col-span-2">
+                <label htmlFor="direct_password" className="label">
+                  Mot de passe
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="direct_password"
+                    name="password"
+                    type="text"
+                    required
+                    minLength={6}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="input"
+                    placeholder="Au moins 6 caractères"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPassword(generateRandomPassword())}
+                    className="flex shrink-0 items-center gap-1 rounded-md px-2.5 text-xs font-medium text-brand-700 ring-1 ring-brand-200 hover:bg-brand-50"
+                  >
+                    <RefreshCw size={13} />
+                    Générer
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {directError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{directError}</p>}
+
+            <button type="submit" disabled={directLoading} className="btn-primary">
+              {directLoading && <Loader2 size={16} className="animate-spin" />}
+              Créer le compte administrateur
+            </button>
+          </form>
+
+          {created && (
+            <div className="mt-4 space-y-2 rounded-lg bg-brand-50 px-3 py-2.5 ring-1 ring-brand-100">
+              <p className="text-xs font-medium text-brand-800">
+                Compte créé — communiquez ces identifiants à l&rsquo;administrateur :
+              </p>
+              <p className="font-mono text-xs text-brand-900">
+                {created.email} / {created.password}
+              </p>
+              <button
+                type="button"
+                onClick={copyCreds}
+                className="flex items-center gap-1 rounded-md bg-white px-2.5 py-1.5 text-xs font-medium text-brand-700 shadow-sm ring-1 ring-brand-200 hover:bg-brand-50"
+              >
+                {credsCopied ? <Check size={13} /> : <Copy size={13} />}
+                {credsCopied ? "Copié" : "Copier"}
+              </button>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <p className="mb-3 text-xs text-gray-500">
+            Génère un lien d&rsquo;invitation avec le rôle Administrateur déjà sélectionné. La personne
+            choisit elle-même son mot de passe en cliquant sur le lien.
+          </p>
+          <button type="button" onClick={handleQuickLink} disabled={linkLoading} className="btn-primary">
+            {linkLoading && <Loader2 size={16} className="animate-spin" />}
+            Générer un lien Administrateur
+          </button>
+
+          {linkError && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{linkError}</p>}
+
+          {link && (
+            <div className="mt-4 flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-2.5 ring-1 ring-brand-100">
+              <input readOnly value={link} className="flex-1 bg-transparent text-xs text-brand-800 outline-none" />
+              <button
+                type="button"
+                onClick={copyLink}
+                className="flex shrink-0 items-center gap-1 rounded-md bg-white px-2.5 py-1.5 text-xs font-medium text-brand-700 shadow-sm ring-1 ring-brand-200 hover:bg-brand-50"
+              >
+                {linkCopied ? <Check size={13} /> : <Copy size={13} />}
+                {linkCopied ? "Copié" : "Copier"}
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -331,6 +551,7 @@ function TeamTab({
 }) {
   return (
     <div className="space-y-6">
+      <EnrollAdminCard orgId={orgId} />
       <InviteForm orgId={orgId} />
       <InvitationsList invitations={invitations} />
       <div className="card">

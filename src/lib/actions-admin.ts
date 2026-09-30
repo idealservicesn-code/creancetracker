@@ -9,6 +9,7 @@
 // ============================================================================
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentProfile } from "@/lib/auth";
 import { isSuperAdmin } from "@/lib/auth-shared";
 import { ActionResult } from "@/lib/actions";
@@ -103,6 +104,77 @@ export async function createInvitationForOrg(
 
   revalidatePath(`/super-admin/${orgId}`);
   return { success: true, token: data.token as string };
+}
+
+// ----------------------------------------------------------------------------
+// Enrôlement direct : le super admin crée lui-même le compte administrateur
+// (email + mot de passe qu'il choisit), actif immédiatement, sans passer par
+// un lien d'invitation. Nécessite la clé service_role (voir lib/supabase/admin.ts) :
+// c'est la seule façon de créer un compte côté serveur sans jamais toucher à
+// la session de navigation du super admin qui effectue l'opération.
+// ----------------------------------------------------------------------------
+export async function createAdminAccountDirectly(
+  orgId: string,
+  formData: FormData
+): Promise<ActionResult & { email?: string; password?: string }> {
+  const guard = await requireSuperAdmin();
+  if (guard) return guard;
+
+  const full_name = String(formData.get("full_name") || "").trim();
+  const email = String(formData.get("email") || "").trim();
+  const password = String(formData.get("password") || "");
+
+  if (!full_name || !email || !password) {
+    return { success: false, error: "Tous les champs sont obligatoires." };
+  }
+  if (password.length < 6) {
+    return { success: false, error: "Le mot de passe doit contenir au moins 6 caractères." };
+  }
+
+  const adminClient = createAdminClient();
+  if (!adminClient) {
+    return {
+      success: false,
+      error:
+        "La création directe de compte nécessite la clé service_role de Supabase (variable SUPABASE_SERVICE_ROLE_KEY), qui n'est pas configurée sur ce déploiement. Utilisez en attendant le lien d'invitation.",
+    };
+  }
+
+  const { data: created, error: createError } = await adminClient.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { full_name },
+  });
+
+  if (createError) {
+    const message = createError.message.includes("already been registered")
+      ? "Un compte existe déjà avec cet email."
+      : createError.message;
+    return { success: false, error: message };
+  }
+
+  const user = created.user;
+  if (!user) return { success: false, error: "Création du compte impossible. Réessayez." };
+
+  const supabase = createClient();
+  const { error: profileError } = await supabase.from("profiles").insert({
+    id: user.id,
+    organization_id: orgId,
+    role: "admin" as UserRole,
+    full_name,
+  });
+
+  if (profileError) {
+    // Compte créé côté Auth mais profil impossible à insérer : on retire le
+    // compte orphelin plutôt que de laisser un utilisateur fantôme.
+    await adminClient.auth.admin.deleteUser(user.id);
+    return { success: false, error: profileError.message };
+  }
+
+  revalidatePath(`/super-admin/${orgId}`);
+  revalidatePath("/super-admin");
+  return { success: true, email, password };
 }
 
 // ----------------------------------------------------------------------------
