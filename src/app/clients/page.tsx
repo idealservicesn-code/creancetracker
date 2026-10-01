@@ -1,15 +1,20 @@
 import { getAllClientDocuments, getClients } from "@/lib/data";
+import { getCurrentProfile } from "@/lib/auth";
+import { isAdminOrAbove } from "@/lib/auth-shared";
 import ClientForm from "@/components/ClientForm";
 import ClientsMapLoader from "@/components/ClientsMapLoader";
 import ClientsTable from "@/components/ClientsTable";
+import ImportContactsLoader from "@/components/ImportContactsLoader";
 
 export const dynamic = "force-dynamic";
 
 export default async function ClientsPage() {
-  const [clients, documentsByClient] = await Promise.all([
+  const [clients, documentsByClient, profile] = await Promise.all([
     getClients(),
     getAllClientDocuments(),
+    getCurrentProfile(),
   ]);
+  const canImport = isAdminOrAbove(profile);
 
   return (
     <div className="space-y-8">
@@ -21,8 +26,9 @@ export default async function ClientsPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
-        <div className="lg:col-span-2">
+        <div className="space-y-6 lg:col-span-2">
           <ClientForm />
+          {canImport && <ImportContactsLoader />}
         </div>
         <div className="lg:col-span-3">
           <div className="card h-[520px] !p-2">

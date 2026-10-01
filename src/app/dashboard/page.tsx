@@ -1,6 +1,7 @@
-import { AlertCircle, TrendingUp, Users, Wallet } from "lucide-react";
+import { AlertCircle, HandCoins, PiggyBank, TrendingUp, Users, Wallet } from "lucide-react";
 import {
   computeKpis,
+  getAllPayments,
   getClients,
   getLoansWithBalance,
   getRecentPayments,
@@ -9,7 +10,9 @@ import {
 import {
   aggregateMonthlyCollections,
   computeClientStatusBreakdown,
+  computeLoanPrincipalByPeriod,
   computeLoanStatusBreakdown,
+  computeProfitReceivedByPeriod,
   computeTopDebtors,
   formatMoney,
 } from "@/lib/utils";
@@ -20,15 +23,17 @@ import StatusPieChart from "@/components/StatusPieChart";
 import TopDebtorsChart from "@/components/TopDebtorsChart";
 import CardHeaderLink from "@/components/CardHeaderLink";
 import QuickActions from "@/components/QuickActions";
+import PeriodAmountCard from "@/components/PeriodAmountCard";
 import { getCurrentOrganization, getCurrentProfile, isAdminOrAbove } from "@/lib/auth";
 import { DEFAULT_CURRENCY } from "@/lib/currencies";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [loans, recentPayments, clients, profile] = await Promise.all([
+  const [loans, recentPayments, allPayments, clients, profile] = await Promise.all([
     getLoansWithBalance(),
     getRecentPayments(6),
+    getAllPayments(),
     getClients(),
     getCurrentProfile(),
   ]);
@@ -43,6 +48,8 @@ export default async function DashboardPage() {
   const clientStatusData = computeClientStatusBreakdown(clients);
   const topDebtors = computeTopDebtors(loans, 5);
   const activeClientsCount = clients.filter((c) => c.status !== "blacklisted").length;
+  const loanPrincipalByPeriod = computeLoanPrincipalByPeriod(loans);
+  const profitReceivedByPeriod = computeProfitReceivedByPeriod(loans, allPayments);
 
   return (
     <div className="space-y-8">
@@ -87,6 +94,25 @@ export default async function DashboardPage() {
           tone="amber"
           hint={`Sur ${clients.length} client(s) au total`}
           href="/clients"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <PeriodAmountCard
+          title="Montant des prêts"
+          subtitle="Capital décaissé, par date d'émission"
+          icon={HandCoins}
+          amounts={loanPrincipalByPeriod}
+          currency={currency}
+          tone="brand"
+        />
+        <PeriodAmountCard
+          title="Bénéfice reçu"
+          subtitle="Part majoration des règlements encaissés"
+          icon={PiggyBank}
+          amounts={profitReceivedByPeriod}
+          currency={currency}
+          tone="emerald"
         />
       </div>
 

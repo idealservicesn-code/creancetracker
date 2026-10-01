@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
-import { Loader2, Plus } from "lucide-react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { Loader2, Plus, RotateCcw } from "lucide-react";
 import { createLoan } from "@/lib/actions";
 import { Client } from "@/lib/types";
 import { computeTotalDue } from "@/lib/utils";
@@ -13,12 +13,26 @@ export default function LoanForm({ clients }: { clients: Client[] }) {
   const [success, setSuccess] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [principal, setPrincipal] = useState("");
+  const [totalDue, setTotalDue] = useState("");
+  const [totalDueTouched, setTotalDueTouched] = useState(false);
   const currency = useCurrency();
   const formatMoney = useFormatMoney();
 
   const today = new Date().toISOString().slice(0, 10);
   const activeClients = clients.filter((c) => c.status !== "blacklisted");
-  const totalDue = computeTotalDue(Number(principal));
+
+  // Le montant total dû suit automatiquement le montant initial (+20%) tant que
+  // l'utilisateur n'a pas modifié ce champ lui-même.
+  useEffect(() => {
+    if (totalDueTouched) return;
+    const auto = computeTotalDue(Number(principal));
+    setTotalDue(principal ? String(auto) : "");
+  }, [principal, totalDueTouched]);
+
+  function resetToAuto() {
+    setTotalDueTouched(false);
+    setTotalDue(principal ? String(computeTotalDue(Number(principal))) : "");
+  }
 
   function handleSubmit(formData: FormData) {
     setError(null);
@@ -32,6 +46,8 @@ export default function LoanForm({ clients }: { clients: Client[] }) {
       }
       formRef.current?.reset();
       setPrincipal("");
+      setTotalDue("");
+      setTotalDueTouched(false);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     });
@@ -85,16 +101,41 @@ export default function LoanForm({ clients }: { clients: Client[] }) {
           <label htmlFor="total_due_amount" className="label">
             Montant total dû ({currency})
           </label>
-          <input
-            id="total_due_amount"
-            type="text"
-            readOnly
-            className="input cursor-not-allowed bg-gray-50 text-gray-600"
-            value={principal ? formatMoney(totalDue) : ""}
-            placeholder="Calculé automatiquement"
-          />
+          <div className="flex gap-1.5">
+            <input
+              id="total_due_amount"
+              name="total_due_amount"
+              type="number"
+              step="0.01"
+              min="0"
+              className="input flex-1"
+              placeholder="Calculé automatiquement"
+              value={totalDue}
+              onChange={(e) => {
+                setTotalDueTouched(true);
+                setTotalDue(e.target.value);
+              }}
+            />
+            {totalDueTouched && (
+              <button
+                type="button"
+                onClick={resetToAuto}
+                title="Revenir au calcul automatique (+20%)"
+                className="flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 px-2.5 text-xs text-gray-500 hover:bg-gray-50"
+              >
+                <RotateCcw size={13} />
+              </button>
+            )}
+          </div>
           <p className="mt-1 text-xs text-gray-400">
-            Calculé automatiquement : montant initial + 20% de majoration.
+            {totalDueTouched
+              ? "Montant modifié manuellement."
+              : "Calculé automatiquement : montant initial + 20% de majoration (modifiable si besoin)."}
+            {principal && !Number.isNaN(Number(principal)) && (
+              <span className="ml-1 text-gray-300">
+                · auto : {formatMoney(computeTotalDue(Number(principal)))}
+              </span>
+            )}
           </p>
         </div>
 

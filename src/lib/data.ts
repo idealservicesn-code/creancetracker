@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { Client, ClientDocument, Invitation, LoanWithBalance, Payment, Profile } from "@/lib/types";
+import { isDueSoonOrOverdue } from "@/lib/utils";
 
 export async function getClients(): Promise<Client[]> {
   const supabase = createClient();
@@ -57,6 +58,18 @@ export async function getRecentPayments(monthsBack = 6): Promise<Payment[]> {
   return data ?? [];
 }
 
+/** Tous les règlements de l'organisation (sans filtre de date) — utilisé pour les widgets "par période" du dashboard, dont le total "Tout". */
+export async function getAllPayments(): Promise<Payment[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("payments")
+    .select("*")
+    .order("payment_date", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
 /** KPIs agrégés pour le dashboard, calculés à partir de v_loans_with_balance */
 export function computeKpis(loans: LoanWithBalance[]) {
   const totalEncours = loans
@@ -74,9 +87,14 @@ export function computeKpis(loans: LoanWithBalance[]) {
   return { totalEncours, totalExigible, tauxRecouvrement, totalDue, totalPaid };
 }
 
+/**
+ * Échéances à surveiller sur le dashboard : en retard, dues aujourd'hui, ou
+ * arrivant à échéance dans les DUE_SOON_THRESHOLD_DAYS prochains jours (alerte
+ * rouge anticipée, avant même le passage au statut "overdue").
+ */
 export function getUpcomingAndOverdueLoans(loans: LoanWithBalance[]): LoanWithBalance[] {
   return loans
-    .filter((l) => l.status !== "paid" && (l.is_overdue || l.is_due_today))
+    .filter((l) => l.status !== "paid" && isDueSoonOrOverdue(l))
     .sort((a, b) => a.due_date.localeCompare(b.due_date));
 }
 

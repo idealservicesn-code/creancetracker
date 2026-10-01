@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { LoanWithBalance, Payment } from "@/lib/types";
-import { formatDate, statusBadgeClasses, statusLabel } from "@/lib/utils";
+import { formatDate, isDueSoonOrOverdue, statusBadgeClasses, statusLabel } from "@/lib/utils";
 import { getPaymentsAction } from "@/lib/actions";
 import { useFormatMoney } from "@/lib/currency-context";
 import PaymentForm from "./PaymentForm";
@@ -51,8 +51,12 @@ export default function LoanRow({ loan }: { loan: LoanWithBalance }) {
               {statusLabel(loan.status)}
             </span>
           </div>
-          <p className="text-xs text-gray-400">
-            Échéance : {formatDate(loan.due_date)} · Émis le {formatDate(loan.issue_date)}
+          <p className="flex items-center gap-1 text-xs text-gray-400">
+            {isDueSoonOrOverdue(loan) && <AlertTriangle size={12} className="shrink-0 text-red-500" />}
+            <span className={isDueSoonOrOverdue(loan) ? "font-medium text-red-600" : ""}>
+              Échéance : {formatDate(loan.due_date)}
+            </span>
+            <span>· Émis le {formatDate(loan.issue_date)}</span>
           </p>
         </div>
 

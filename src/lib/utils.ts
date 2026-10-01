@@ -57,6 +57,19 @@ export function daysUntil(dateStr: string): number {
   return Math.round(diffMs / (1000 * 60 * 60 * 24));
 }
 
+/** Nombre de jours avant échéance à partir duquel on signale la créance en rouge (alerte anticipée). */
+export const DUE_SOON_THRESHOLD_DAYS = 5;
+
+/**
+ * Vrai si l'échéance est déjà dépassée, due aujourd'hui, ou arrive dans moins de
+ * DUE_SOON_THRESHOLD_DAYS jours — signalement visuel en rouge, avant même le
+ * passage officiel au statut "overdue" (qui ne bascule qu'après la date d'échéance).
+ */
+export function isDueSoonOrOverdue(loan: { status: string; due_date: string }): boolean {
+  if (loan.status === "paid") return false;
+  return daysUntil(loan.due_date) < DUE_SOON_THRESHOLD_DAYS;
+}
+
 export function statusLabel(status: string): string {
   switch (status) {
     case "ongoing":
@@ -199,6 +212,90 @@ export function computeClientStatusBreakdown(
       count,
       color: meta[status]?.color ?? "#9ca3af",
     }));
+}
+
+// ----------------------------------------------------------------------------
+// Montants par période (dashboard) : prêts décaissés et bénéfice reçu, filtrés
+// par semaine en cours / mois en cours / année en cours / depuis toujours.
+// ----------------------------------------------------------------------------
+export interface PeriodAmounts {
+  week: number;
+  month: number;
+  year: number;
+  all: number;
+}
+
+export type PeriodKey = keyof PeriodAmounts;
+
+export const PERIOD_LABELS: Record<PeriodKey, string> = {
+  week: "Cette semaine",
+  month: "Ce mois-ci",
+  year: "Cette année",
+  all: "Depuis toujours",
+};
+
+/** Additionne des montants datés dans les 4 fenêtres (semaine/mois/année en cours, et total). */
+function sumByPeriod(entries: { date: string; amount: number }[]): PeriodAmounts {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+
+  // Semaine en cours = lundi 00:00 → dimanche 23:59 (ISO, lundi = début de semaine).
+  const dayIdx = (now.getDay() + 6) % 7; // lundi=0 … dimanche=6
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - dayIdx);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 7); // borne exclusive
+
+  const result: PeriodAmounts = { week: 0, month: 0, year: 0, all: 0 };
+
+  for (const { date, amount } of entries) {
+    if (!date || !Number.isFinite(amount)) continue;
+    const d = new Date(date + "T00:00:00");
+    if (Number.isNaN(d.getTime())) continue;
+
+    result.all += amount;
+    if (d.getFullYear() === now.getFullYear()) {
+      result.year += amount;
+      if (d.getMonth() === now.getMonth()) result.month += amount;
+    }
+    if (d >= weekStart && d < weekEnd) result.week += amount;
+  }
+
+  return result;
+}
+
+/** Montant des prêts décaissés (capital initial) par période, basé sur la date d'émission. */
+export function computeLoanPrincipalByPeriod(
+  loans: { issue_date: string; principal_amount: number }[]
+): PeriodAmounts {
+  return sumByPeriod(loans.map((l) => ({ date: l.issue_date, amount: Number(l.principal_amount) })));
+}
+
+/**
+ * Bénéfice reçu par période : la part "majoration" de chaque règlement encaissé,
+ * reconnue au prorata du taux de marge du prêt concerné (majoration / montant
+ * total dû). Ex: un prêt majoré de 20% (total dû = capital × 1.2) a une marge de
+ * 1 - (1/1.2) ≈ 16,7% — chaque règlement reçu sur ce prêt compte pour 16,7% de
+ * bénéfice et 83,3% de récupération de capital. Basé sur la date du règlement.
+ */
+export function computeProfitReceivedByPeriod(
+  loans: { id: string; principal_amount: number; total_due_amount: number }[],
+  payments: { loan_id: string; amount_paid: number; payment_date: string }[]
+): PeriodAmounts {
+  const marginByLoan = new Map(
+    loans.map((l) => {
+      const total = Number(l.total_due_amount);
+      const margin = total > 0 ? Math.max(0, (total - Number(l.principal_amount)) / total) : 0;
+      return [l.id, margin];
+    })
+  );
+
+  const entries = payments.map((p) => ({
+    date: p.payment_date,
+    amount: Number(p.amount_paid) * (marginByLoan.get(p.loan_id) ?? 0),
+  }));
+
+  return sumByPeriod(entries);
 }
 
 export interface DebtorSlice {

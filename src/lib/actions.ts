@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth";
-import { isPendingAdmin, PENDING_VALIDATION_MESSAGE } from "@/lib/auth-shared";
+import { isAdminOrAbove, isPendingAdmin, PENDING_VALIDATION_MESSAGE } from "@/lib/auth-shared";
 import { ClientStatus, LoanStatus, Payment } from "@/lib/types";
 
 export interface ActionResult {
@@ -96,6 +96,72 @@ export async function createClientRecord(formData: FormData): Promise<ActionResu
   return { success: true };
 }
 
+// ----------------------------------------------------------------------------
+// Import de contacts en masse (téléphone / ordinateur / fichier Excel-CSV)
+// Réservé aux administrateurs (et super admin) : la lecture du fichier et le
+// mappage des colonnes se font côté client (src/lib/contact-import.ts), cette
+// action ne fait qu'insérer les lignes déjà validées/nettoyées, avec les mêmes
+// garde-fous (organisation, statut "pending") que createClientRecord.
+// ----------------------------------------------------------------------------
+export interface ImportedContactRow {
+  full_name: string;
+  phone?: string | null;
+  cin?: string | null;
+  address_notes?: string | null;
+}
+
+export async function bulkImportClients(
+  rows: ImportedContactRow[]
+): Promise<ActionResult & { inserted?: number; skipped?: number }> {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return { success: false, error: "Aucun contact à importer." };
+  }
+  if (rows.length > 1000) {
+    return { success: false, error: "Trop de contacts en une seule fois (maximum 1000)." };
+  }
+
+  const profile = await getCurrentProfile();
+  if (!profile?.organization_id) {
+    return { success: false, error: "Organisation introuvable pour cet utilisateur." };
+  }
+  if (isPendingAdmin(profile)) {
+    return { success: false, error: PENDING_VALIDATION_MESSAGE };
+  }
+  // L'import de masse est une capacité donnée aux administrateurs (et super
+  // admin), pas aux superviseurs — même s'ils ont la permission d'ajouter des
+  // clients un par un.
+  if (!isAdminOrAbove(profile)) {
+    return { success: false, error: "L'import de contacts est réservé aux administrateurs." };
+  }
+
+  const cleaned = rows
+    .map((r) => ({
+      organization_id: profile.organization_id as string,
+      full_name: String(r.full_name || "").trim(),
+      phone: r.phone ? String(r.phone).trim() : null,
+      cin: r.cin ? String(r.cin).trim() : null,
+      address_notes: r.address_notes ? String(r.address_notes).trim() : null,
+      status: "active" as ClientStatus,
+    }))
+    .filter((r) => r.full_name.length > 0);
+
+  const skipped = rows.length - cleaned.length;
+  if (cleaned.length === 0) {
+    return { success: false, error: "Aucun contact valide (nom manquant) dans la sélection." };
+  }
+
+  const supabase = createClient();
+  const { error, count } = await supabase.from("clients").insert(cleaned, { count: "exact" });
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  revalidatePath("/clients");
+  revalidatePath("/dashboard");
+  return { success: true, inserted: count ?? cleaned.length, skipped };
+}
+
 export async function updateClientStatus(
   clientId: string,
   status: ClientStatus
@@ -127,9 +193,20 @@ export async function createLoan(formData: FormData): Promise<ActionResult> {
     return { success: false, error: "Montant initial invalide." };
   }
 
-  // Le montant total dû est toujours calculé côté serveur (montant initial + 20%)
-  // pour garantir la cohérence, quelle que soit la valeur envoyée par le formulaire.
-  const total_due_amount = Math.round(principal_amount * MARKUP_RATE * 100) / 100;
+  // Le montant total dû est calculé automatiquement par défaut (montant initial
+  // + 20% de majoration), mais reste modifiable depuis le formulaire (ex: remise
+  // négociée, arrondi, taux différent pour un client donné). Si le champ envoyé
+  // est vide ou invalide, on retombe sur le calcul automatique.
+  const autoTotalDue = Math.round(principal_amount * MARKUP_RATE * 100) / 100;
+  const totalDueRaw = String(formData.get("total_due_amount") || "").trim();
+  let total_due_amount = autoTotalDue;
+  if (totalDueRaw) {
+    const parsed = Number(totalDueRaw);
+    if (Number.isNaN(parsed) || parsed < 0) {
+      return { success: false, error: "Montant total dû invalide." };
+    }
+    total_due_amount = Math.round(parsed * 100) / 100;
+  }
 
   const profile = await getCurrentProfile();
   if (!profile?.organization_id) {

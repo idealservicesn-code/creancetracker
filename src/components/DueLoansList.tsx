@@ -1,7 +1,14 @@
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import { LoanWithBalance } from "@/lib/types";
-import { formatMoney, formatDate, statusBadgeClasses, statusLabel } from "@/lib/utils";
+import {
+  DUE_SOON_THRESHOLD_DAYS,
+  formatMoney,
+  formatDate,
+  isDueSoonOrOverdue,
+  statusBadgeClasses,
+  statusLabel,
+} from "@/lib/utils";
 import { DEFAULT_CURRENCY } from "@/lib/currencies";
 
 export default function DueLoansList({
@@ -14,7 +21,8 @@ export default function DueLoansList({
   if (loans.length === 0) {
     return (
       <div className="card flex flex-col items-center justify-center py-10 text-center text-sm text-gray-400">
-        Aucune échéance en retard ou arrivant à terme aujourd&apos;hui. 🎉
+        Aucune échéance en retard ou arrivant à échéance dans les {DUE_SOON_THRESHOLD_DAYS} prochains
+        jours. 🎉
       </div>
     );
   }
@@ -42,8 +50,12 @@ export default function DueLoansList({
                 )}
               </td>
               <td className="px-4 py-3 text-gray-600">
-                <span className="flex items-center gap-1.5">
-                  {loan.is_overdue && <AlertTriangle size={14} className="text-red-500" />}
+                <span
+                  className={`flex items-center gap-1.5 ${
+                    isDueSoonOrOverdue(loan) ? "font-medium text-red-600" : ""
+                  }`}
+                >
+                  {isDueSoonOrOverdue(loan) && <AlertTriangle size={14} className="text-red-500" />}
                   {formatDate(loan.due_date)}
                 </span>
               </td>
