@@ -5,7 +5,12 @@ import AssistantWidget from "@/components/AssistantWidget";
 import { CurrencyProvider } from "@/lib/currency-context";
 import { DEFAULT_CURRENCY } from "@/lib/currencies";
 import { createClient } from "@/lib/supabase/server";
-import { ensureProfileProvisioned, getCurrentOrganization, getCurrentProfile } from "@/lib/auth";
+import {
+  ensureProfileProvisioned,
+  getCurrentOrganization,
+  getCurrentProfile,
+  isPendingAdmin,
+} from "@/lib/auth";
 import { getLocale, isRtl } from "@/lib/i18n";
 import {
   DEFAULT_ORG_THEME,
@@ -68,6 +73,12 @@ export default async function RootLayout({
             <div className="flex h-screen overflow-hidden">
               <Sidebar organization={organization} profile={profile} />
               <main className="flex-1 overflow-y-auto">
+                {isPendingAdmin(profile) ? (
+                  <div className="bg-amber-50 px-6 py-2.5 text-center text-sm text-amber-800 ring-1 ring-inset ring-amber-100">
+                    Votre compte est en attente de validation par le super administrateur de la
+                    plateforme. Vous pouvez consulter vos données, mais pas encore les modifier.
+                  </div>
+                ) : null}
                 <div className="mx-auto max-w-7xl px-6 py-8">{children}</div>
               </main>
               <AssistantWidget />

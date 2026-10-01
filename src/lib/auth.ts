@@ -52,7 +52,13 @@ export async function ensureProfileProvisioned(): Promise<Profile | null> {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .insert({ id: user.id, organization_id: org.id, role: "admin", full_name: fullName })
+      .insert({
+        id: user.id,
+        organization_id: org.id,
+        role: "admin",
+        full_name: fullName,
+        status: "pending",
+      })
       .select()
       .single();
     return (profile as Profile) ?? null;
@@ -72,6 +78,7 @@ export async function ensureProfileProvisioned(): Promise<Profile | null> {
         role: invitation.role,
         full_name: fullName,
         permissions: invitation.permissions ?? {},
+        status: "active",
       })
       .select()
       .single();

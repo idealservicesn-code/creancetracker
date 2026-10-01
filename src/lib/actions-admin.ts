@@ -178,6 +178,47 @@ export async function createAdminAccountDirectly(
 }
 
 // ----------------------------------------------------------------------------
+// Validation d'un compte admin issu de l'inscription libre (statut 'pending').
+// Le super admin confirme (ou corrige) le rôle à cette occasion : rester
+// Administrateur de sa propre organisation, ou être rétrogradé Superviseur
+// (par exemple si son organisation doit en fait être rattachée à une équipe
+// existante — à faire manuellement si besoin). Le compte passe 'active' dans
+// tous les cas, ce qui lève la restriction en lecture seule.
+// ----------------------------------------------------------------------------
+export async function validateAdminAccount(
+  profileId: string,
+  orgId: string,
+  role: "admin" | "supervisor" = "admin"
+): Promise<ActionResult> {
+  const guard = await requireSuperAdmin();
+  if (guard) return guard;
+
+  const supabase = createClient();
+  const update: { status: "active"; role: UserRole; permissions?: Record<string, unknown> } = {
+    status: "active",
+    role,
+  };
+  if (role === "supervisor") {
+    // Accès par défaut cohérent avec celui proposé ailleurs pour un nouveau
+    // superviseur (voir PermissionCheckboxes) : clients + prêts en voir/modifier,
+    // dashboard en lecture, documents laissés fermés par défaut.
+    update.permissions = {
+      clients: { view: true, edit: true },
+      loans: { view: true, edit: true },
+      documents: { view: false, edit: false },
+      dashboard: { view: true },
+    };
+  }
+
+  const { error } = await supabase.from("profiles").update(update).eq("id", profileId);
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/super-admin");
+  revalidatePath(`/super-admin/${orgId}`);
+  return { success: true };
+}
+
+// ----------------------------------------------------------------------------
 // Membres : changer le rôle d'un membre (admin <-> superviseur uniquement —
 // jamais vers/depuis super_admin via cette interface, par prudence).
 // ----------------------------------------------------------------------------

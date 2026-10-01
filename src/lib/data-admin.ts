@@ -67,6 +67,22 @@ export async function getAllProfilesWithOrg(): Promise<ProfileWithOrg[]> {
   }));
 }
 
+/** Comptes admin issus de l'inscription libre, en attente de validation par un super admin. */
+export async function getPendingAdminAccounts(): Promise<ProfileWithOrg[]> {
+  const supabase = createClient();
+  const [{ data: profiles, error }, { data: orgs }] = await Promise.all([
+    supabase.from("profiles").select("*").eq("status", "pending").order("created_at", { ascending: false }),
+    supabase.from("organizations").select("id, name"),
+  ]);
+  if (error) throw new Error(error.message);
+
+  const orgNameById = new Map((orgs ?? []).map((o) => [o.id, o.name as string]));
+  return (profiles ?? []).map((p) => ({
+    ...(p as Profile),
+    organization_name: p.organization_id ? orgNameById.get(p.organization_id) ?? null : null,
+  }));
+}
+
 export async function getOrganizationById(orgId: string): Promise<Organization | null> {
   const supabase = createClient();
   const { data } = await supabase.from("organizations").select("*").eq("id", orgId).maybeSingle();

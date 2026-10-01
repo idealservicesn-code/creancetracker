@@ -107,12 +107,21 @@ export interface SupervisorPermissions {
   dashboard?: SectionPermission;
 }
 
+export type ProfileStatus = "pending" | "active";
+
 export interface Profile {
   id: string;
   organization_id: string | null;
   role: UserRole;
   full_name: string | null;
   permissions: SupervisorPermissions;
+  /**
+   * 'pending' uniquement pour les admins issus de l'inscription libre
+   * (/signup), tant qu'un super admin ne les a pas validés : accès en
+   * lecture seule (voir isPendingAdmin dans auth-shared.ts). Les comptes créés
+   * par invitation ou directement par un super admin sont 'active' d'emblée.
+   */
+  status: ProfileStatus;
   created_at: string;
   updated_at: string;
 }

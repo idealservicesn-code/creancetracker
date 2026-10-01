@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Building2, ChevronRight, ShieldCheck, Users } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Building2, Check, ChevronRight, Loader2, ShieldAlert, ShieldCheck, Users } from "lucide-react";
+import { validateAdminAccount } from "@/lib/actions-admin";
 import { OrganizationOverview, ProfileWithOrg } from "@/lib/data-admin";
 import { formatDate, formatMoney } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -13,7 +15,7 @@ const ROLE_LABELS: Record<string, string> = {
   supervisor: "Superviseur",
 };
 
-type TabKey = "organizations" | "members";
+type TabKey = "organizations" | "members" | "pending";
 
 function OrganizationsTab({ organizations }: { organizations: OrganizationOverview[] }) {
   if (organizations.length === 0) {
@@ -124,16 +126,94 @@ function MembersTab({ members }: { members: ProfileWithOrg[] }) {
   );
 }
 
+function PendingRow({ member }: { member: ProfileWithOrg }) {
+  const router = useRouter();
+  const [role, setRole] = useState<"admin" | "supervisor">("admin");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleValidate() {
+    if (!member.organization_id) return;
+    setBusy(true);
+    setError(null);
+    const result = await validateAdminAccount(member.id, member.organization_id, role);
+    setBusy(false);
+    if (!result.success) {
+      setError(result.error ?? "Erreur lors de la validation.");
+      return;
+    }
+    router.refresh();
+  }
+
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-3 py-3">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium text-gray-800">{member.full_name || "Sans nom"}</p>
+        <p className="text-xs text-gray-400">
+          {member.organization_name || "—"} · Inscrit le {formatDate(member.created_at)}
+        </p>
+        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <select
+          value={role}
+          onChange={(e) => setRole(e.target.value as "admin" | "supervisor")}
+          className="input !h-9 !py-0 text-xs"
+        >
+          <option value="admin">Administrateur</option>
+          <option value="supervisor">Superviseur</option>
+        </select>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={handleValidate}
+          className="flex items-center gap-1 rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+        >
+          {busy ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+          Valider
+        </button>
+      </div>
+    </li>
+  );
+}
+
+function PendingTab({ pending }: { pending: ProfileWithOrg[] }) {
+  if (pending.length === 0) {
+    return (
+      <div className="card flex items-center justify-center py-10 text-sm text-gray-400">
+        Aucun compte en attente de validation.
+      </div>
+    );
+  }
+  return (
+    <div className="card">
+      <div className="mb-3 flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-100">
+        <ShieldAlert size={14} className="shrink-0" />
+        Ces comptes se sont inscrits eux-mêmes via la page d&rsquo;inscription libre (nouvelle
+        organisation). Ils ont un accès en lecture seule tant qu&rsquo;ils ne sont pas validés ici.
+      </div>
+      <ul className="divide-y divide-gray-100">
+        {pending.map((member) => (
+          <PendingRow key={member.id} member={member} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function SuperAdminConsole({
   organizations,
   members,
+  pending,
 }: {
   organizations: OrganizationOverview[];
   members: ProfileWithOrg[];
+  pending: ProfileWithOrg[];
 }) {
-  const [tab, setTab] = useState<TabKey>("organizations");
+  const [tab, setTab] = useState<TabKey>(pending.length > 0 ? "pending" : "organizations");
 
   const tabs: { key: TabKey; label: string; icon: typeof Building2; count: number }[] = [
+    { key: "pending", label: "Validation", icon: ShieldAlert, count: pending.length },
     { key: "organizations", label: "Organisations", icon: Building2, count: organizations.length },
     { key: "members", label: "Tous les membres", icon: Users, count: members.length },
   ];
@@ -167,7 +247,9 @@ export default function SuperAdminConsole({
         Vue réservée au super administrateur. Les administrateurs d&rsquo;organisation n&rsquo;ont pas accès à cette console.
       </div>
 
-      {tab === "organizations" ? (
+      {tab === "pending" ? (
+        <PendingTab pending={pending} />
+      ) : tab === "organizations" ? (
         <OrganizationsTab organizations={organizations} />
       ) : (
         <MembersTab members={members} />

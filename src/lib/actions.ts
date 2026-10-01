@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth";
+import { isPendingAdmin, PENDING_VALIDATION_MESSAGE } from "@/lib/auth-shared";
 import { ClientStatus, LoanStatus, Payment } from "@/lib/types";
 
 export interface ActionResult {
@@ -70,6 +71,9 @@ export async function createClientRecord(formData: FormData): Promise<ActionResu
   if (!profile?.organization_id) {
     return { success: false, error: "Organisation introuvable pour cet utilisateur." };
   }
+  if (isPendingAdmin(profile)) {
+    return { success: false, error: PENDING_VALIDATION_MESSAGE };
+  }
 
   const supabase = createClient();
   const { error } = await supabase.from("clients").insert({
@@ -131,6 +135,9 @@ export async function createLoan(formData: FormData): Promise<ActionResult> {
   if (!profile?.organization_id) {
     return { success: false, error: "Organisation introuvable pour cet utilisateur." };
   }
+  if (isPendingAdmin(profile)) {
+    return { success: false, error: PENDING_VALIDATION_MESSAGE };
+  }
 
   const supabase = createClient();
   const { error } = await supabase.from("loans").insert({
@@ -167,6 +174,9 @@ export async function recordPayment(formData: FormData): Promise<ActionResult> {
   const profile = await getCurrentProfile();
   if (!profile?.organization_id) {
     return { success: false, error: "Organisation introuvable pour cet utilisateur." };
+  }
+  if (isPendingAdmin(profile)) {
+    return { success: false, error: PENDING_VALIDATION_MESSAGE };
   }
 
   const supabase = createClient();
@@ -217,6 +227,9 @@ export async function uploadClientDocument(formData: FormData): Promise<ActionRe
   const profile = await getCurrentProfile();
   if (!profile?.organization_id) {
     return { success: false, error: "Organisation introuvable pour cet utilisateur." };
+  }
+  if (isPendingAdmin(profile)) {
+    return { success: false, error: PENDING_VALIDATION_MESSAGE };
   }
 
   const supabase = createClient();

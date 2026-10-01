@@ -1,7 +1,11 @@
 import { redirect } from "next/navigation";
 import { getCurrentProfile } from "@/lib/auth";
 import { isSuperAdmin } from "@/lib/auth-shared";
-import { getAllOrganizationsOverview, getAllProfilesWithOrg } from "@/lib/data-admin";
+import {
+  getAllOrganizationsOverview,
+  getAllProfilesWithOrg,
+  getPendingAdminAccounts,
+} from "@/lib/data-admin";
 import SuperAdminConsole from "@/components/SuperAdminConsole";
 
 export const dynamic = "force-dynamic";
@@ -12,9 +16,10 @@ export default async function SuperAdminPage() {
     redirect("/dashboard");
   }
 
-  const [organizations, members] = await Promise.all([
+  const [organizations, members, pending] = await Promise.all([
     getAllOrganizationsOverview(),
     getAllProfilesWithOrg(),
+    getPendingAdminAccounts(),
   ]);
 
   return (
@@ -27,7 +32,7 @@ export default async function SuperAdminPage() {
         </p>
       </div>
 
-      <SuperAdminConsole organizations={organizations} members={members} />
+      <SuperAdminConsole organizations={organizations} members={members} pending={pending} />
     </div>
   );
 }

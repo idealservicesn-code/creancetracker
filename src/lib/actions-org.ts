@@ -2,7 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentOrganization, getCurrentProfile, isAdminOrAbove } from "@/lib/auth";
+import {
+  getCurrentOrganization,
+  getCurrentProfile,
+  isAdminOrAbove,
+  isPendingAdmin,
+  PENDING_VALIDATION_MESSAGE,
+} from "@/lib/auth";
 import { ActionResult } from "@/lib/actions";
 import { Locale, OrgTheme, SupervisorPermissions, UserRole } from "@/lib/types";
 import { CURRENCIES, DEFAULT_CURRENCY } from "@/lib/currencies";
@@ -102,6 +108,11 @@ export async function signUpOrganization(formData: FormData): Promise<SignUpResu
     organization_id: org.id,
     role: "admin" as UserRole,
     full_name: fullName,
+    // En attente de validation par un super admin : cet administrateur et son
+    // organisation viennent d'être créés par inscription libre, sans
+    // supervision. Accès en lecture seule jusqu'à validation (voir
+    // isPendingAdmin dans lib/auth-shared.ts et la Console Super Admin).
+    status: "pending",
   });
 
   if (profileError) {
@@ -130,6 +141,9 @@ export async function createInvitation(formData: FormData): Promise<ActionResult
   const profile = await getCurrentProfile();
   if (!isAdminOrAbove(profile) || !profile?.organization_id) {
     return { success: false, error: "Action réservée aux administrateurs." };
+  }
+  if (isPendingAdmin(profile)) {
+    return { success: false, error: PENDING_VALIDATION_MESSAGE };
   }
 
   const email = String(formData.get("email") || "").trim() || null;
@@ -161,6 +175,7 @@ export async function createInvitation(formData: FormData): Promise<ActionResult
 export async function revokeInvitation(invitationId: string): Promise<ActionResult> {
   const profile = await getCurrentProfile();
   if (!isAdminOrAbove(profile)) return { success: false, error: "Action réservée aux administrateurs." };
+  if (isPendingAdmin(profile)) return { success: false, error: PENDING_VALIDATION_MESSAGE };
 
   const supabase = createClient();
   const { error } = await supabase.from("invitations").delete().eq("id", invitationId);
@@ -176,6 +191,7 @@ export async function updateSupervisorPermissions(
 ): Promise<ActionResult> {
   const profile = await getCurrentProfile();
   if (!isAdminOrAbove(profile)) return { success: false, error: "Action réservée aux administrateurs." };
+  if (isPendingAdmin(profile)) return { success: false, error: PENDING_VALIDATION_MESSAGE };
 
   const supabase = createClient();
   const { error } = await supabase.from("profiles").update({ permissions }).eq("id", profileId);
@@ -188,6 +204,7 @@ export async function updateSupervisorPermissions(
 export async function removeTeamMember(profileId: string): Promise<ActionResult> {
   const profile = await getCurrentProfile();
   if (!isAdminOrAbove(profile)) return { success: false, error: "Action réservée aux administrateurs." };
+  if (isPendingAdmin(profile)) return { success: false, error: PENDING_VALIDATION_MESSAGE };
   if (profile?.id === profileId) return { success: false, error: "Vous ne pouvez pas vous retirer vous-même." };
 
   const supabase = createClient();
@@ -250,6 +267,9 @@ export async function acceptInvitation(token: string, formData: FormData): Promi
     role: invitation.role as UserRole,
     full_name: fullName,
     permissions: invitation.permissions ?? {},
+    // Compte créé via un lien d'invitation émis par un admin/super admin déjà
+    // validé : pas besoin de re-validation, actif immédiatement.
+    status: "active",
   });
 
   if (profileError) return { success: false, error: profileError.message };
@@ -267,6 +287,9 @@ export async function updateOrganizationTheme(formData: FormData): Promise<Actio
   const profile = await getCurrentProfile();
   if (!isAdminOrAbove(profile) || !profile?.organization_id) {
     return { success: false, error: "Action réservée aux administrateurs." };
+  }
+  if (isPendingAdmin(profile)) {
+    return { success: false, error: PENDING_VALIDATION_MESSAGE };
   }
 
   const name = String(formData.get("name") || "").trim();
@@ -300,6 +323,9 @@ export async function uploadOrganizationLogo(formData: FormData): Promise<Action
   const profile = await getCurrentProfile();
   if (!isAdminOrAbove(profile) || !profile?.organization_id) {
     return { success: false, error: "Action réservée aux administrateurs." };
+  }
+  if (isPendingAdmin(profile)) {
+    return { success: false, error: PENDING_VALIDATION_MESSAGE };
   }
 
   const logo = formData.get("logo") as File | null;
