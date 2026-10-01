@@ -17,6 +17,7 @@ import { Locale, OrgTheme, UserRole } from "@/lib/types";
 import { CURRENCIES, DEFAULT_CURRENCY } from "@/lib/currencies";
 
 const VALID_CURRENCY_CODES = new Set(CURRENCIES.map((c) => c.code));
+const LOGO_BUCKET = "org-logos";
 
 function sanitizeCurrency(raw: FormDataEntryValue | null): string {
   const value = String(raw || "").trim().toUpperCase();
@@ -60,6 +61,54 @@ export async function updateOrganizationAsSuperAdmin(orgId: string, formData: Fo
     .eq("id", orgId);
 
   if (error) return { success: false, error: error.message };
+
+  revalidatePath(`/super-admin/${orgId}`);
+  revalidatePath("/super-admin");
+  return { success: true };
+}
+
+// ----------------------------------------------------------------------------
+// Logo : le super admin peut téléverser/remplacer le logo de N'IMPORTE QUELLE
+// organisation (contrairement à uploadOrganizationLogo dans actions-org.ts, qui
+// cible toujours l'organisation du profil appelant — inutilisable ici puisque
+// le super admin n'a pas d'organisation propre).
+// ----------------------------------------------------------------------------
+export async function uploadOrganizationLogoAsSuperAdmin(
+  orgId: string,
+  formData: FormData
+): Promise<ActionResult> {
+  const guard = await requireSuperAdmin();
+  if (guard) return guard;
+
+  const logo = formData.get("logo") as File | null;
+  if (!logo || logo.size === 0) return { success: false, error: "Veuillez sélectionner une image." };
+
+  const supabase = createClient();
+  const safeName = logo.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+  const storagePath = `${orgId}/logo_${Date.now()}_${safeName}`;
+
+  const { error: uploadError } = await supabase.storage.from(LOGO_BUCKET).upload(storagePath, logo, {
+    upsert: false,
+  });
+  if (uploadError) return { success: false, error: uploadError.message };
+
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("logo_storage_path")
+    .eq("id", orgId)
+    .maybeSingle();
+  const previousPath = org?.logo_storage_path as string | null | undefined;
+
+  const { error: updateError } = await supabase
+    .from("organizations")
+    .update({ logo_storage_path: storagePath })
+    .eq("id", orgId);
+
+  if (updateError) return { success: false, error: updateError.message };
+
+  if (previousPath) {
+    await supabase.storage.from(LOGO_BUCKET).remove([previousPath]);
+  }
 
   revalidatePath(`/super-admin/${orgId}`);
   revalidatePath("/super-admin");

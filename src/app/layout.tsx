@@ -25,6 +25,11 @@ export const metadata: Metadata = {
   description: "Gestion de portefeuille de créances et suivi d'échéanciers",
 };
 
+// Le layout lit le profil et l'organisation (thème, devise, logo) à chaque
+// requête : forcer le rendu dynamique évite tout risque de mise en cache d'une
+// ancienne valeur (ex: devise) après une modification dans les paramètres.
+export const dynamic = "force-dynamic";
+
 export default async function RootLayout({
   children,
 }: {

@@ -2,7 +2,6 @@
 
 import { useRef, useState } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 import { ImagePlus, Loader2, Palette } from "lucide-react";
 import { updateOrganizationTheme, uploadOrganizationLogo } from "@/lib/actions-org";
 import { DEFAULT_ORG_THEME } from "@/lib/color";
@@ -29,7 +28,6 @@ const LOCALE_OPTIONS = [
 ];
 
 export default function SettingsManager({ organization }: { organization: Organization }) {
-  const router = useRouter();
   const theme = { ...DEFAULT_ORG_THEME, ...organization.theme };
 
   const [saving, setSaving] = useState(false);
@@ -52,14 +50,16 @@ export default function SettingsManager({ organization }: { organization: Organi
     setSaved(false);
     setError(null);
     const result = await updateOrganizationTheme(formData);
-    setSaving(false);
     if (!result.success) {
+      setSaving(false);
       setError(result.error ?? "Une erreur est survenue.");
       return;
     }
     setSaved(true);
-    router.refresh();
-    setTimeout(() => setSaved(false), 2500);
+    // Rechargement complet (plutôt que router.refresh()) pour garantir que la
+    // devise, le thème et la langue sont immédiatement répercutés partout dans
+    // l'application (sidebar, dashboard, prêts…), sans ambiguïté de cache.
+    window.location.reload();
   }
 
   async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -70,12 +70,12 @@ export default function SettingsManager({ organization }: { organization: Organi
     const formData = new FormData();
     formData.set("logo", file);
     const result = await uploadOrganizationLogo(formData);
-    setUploading(false);
     if (!result.success) {
+      setUploading(false);
       setLogoError(result.error ?? "Erreur lors du téléversement.");
       return;
     }
-    router.refresh();
+    window.location.reload();
   }
 
   return (
