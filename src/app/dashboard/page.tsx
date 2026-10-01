@@ -101,7 +101,7 @@ export default async function DashboardPage() {
         <PeriodAmountCard
           title="Montant des prêts"
           subtitle="Capital décaissé, par date d'émission"
-          icon={HandCoins}
+          icon={<HandCoins size={18} className="text-brand-700" />}
           amounts={loanPrincipalByPeriod}
           currency={currency}
           tone="brand"
@@ -109,7 +109,7 @@ export default async function DashboardPage() {
         <PeriodAmountCard
           title="Bénéfice reçu"
           subtitle="Part majoration des règlements encaissés"
-          icon={PiggyBank}
+          icon={<PiggyBank size={18} className="text-emerald-700" />}
           amounts={profitReceivedByPeriod}
           currency={currency}
           tone="emerald"

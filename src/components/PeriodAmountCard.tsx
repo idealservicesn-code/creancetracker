@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { LucideIcon } from "lucide-react";
+import { ReactNode, useState } from "react";
 import { PERIOD_LABELS, PeriodAmounts, PeriodKey, cn, formatMoney } from "@/lib/utils";
 import { DEFAULT_CURRENCY } from "@/lib/currencies";
 
@@ -16,30 +15,34 @@ const PERIOD_SHORT_LABELS: Record<PeriodKey, string> = {
 interface PeriodAmountCardProps {
   title: string;
   subtitle?: string;
-  icon: LucideIcon;
+  // Icône déjà rendue (ex: <HandCoins size={18} className="text-brand-700" />),
+  // et non une référence de composant : un composant Server ne peut pas passer
+  // une fonction/référence de composant brute à un Client Component (erreur de
+  // sérialisation RSC — "a server-side exception has occurred" en production).
+  // Un élément JSX déjà construit, lui, est sérialisable sans problème.
+  icon: ReactNode;
   amounts: PeriodAmounts;
   currency?: string;
   tone?: "brand" | "emerald" | "amber";
   defaultPeriod?: PeriodKey;
 }
 
-const TONE_CLASSES: Record<NonNullable<PeriodAmountCardProps["tone"]>, { bg: string; text: string }> = {
-  brand: { bg: "bg-brand-50", text: "text-brand-700" },
-  emerald: { bg: "bg-emerald-50", text: "text-emerald-700" },
-  amber: { bg: "bg-amber-50", text: "text-amber-700" },
+const TONE_BG_CLASSES: Record<NonNullable<PeriodAmountCardProps["tone"]>, string> = {
+  brand: "bg-brand-50",
+  emerald: "bg-emerald-50",
+  amber: "bg-amber-50",
 };
 
 export default function PeriodAmountCard({
   title,
   subtitle,
-  icon: Icon,
+  icon,
   amounts,
   currency = DEFAULT_CURRENCY,
   tone = "brand",
   defaultPeriod = "month",
 }: PeriodAmountCardProps) {
   const [period, setPeriod] = useState<PeriodKey>(defaultPeriod);
-  const toneClasses = TONE_CLASSES[tone];
 
   return (
     <div className="card">
@@ -48,8 +51,8 @@ export default function PeriodAmountCard({
           <p className="text-sm font-semibold text-gray-900">{title}</p>
           {subtitle && <p className="text-xs text-gray-400">{subtitle}</p>}
         </div>
-        <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", toneClasses.bg)}>
-          <Icon size={18} className={toneClasses.text} />
+        <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", TONE_BG_CLASSES[tone])}>
+          {icon}
         </div>
       </div>
 

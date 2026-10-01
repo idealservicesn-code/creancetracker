@@ -303,17 +303,22 @@ export interface DebtorSlice {
   balance: number;
 }
 
-/** Les N clients ayant le solde restant le plus élevé (prêts non soldés) */
+/**
+ * Les N clients ayant le solde restant le plus élevé (prêts non soldés).
+ * Number(...) est nécessaire : balance_due est une colonne numeric Postgres,
+ * renvoyée en chaîne par Supabase.
+ */
 export function computeTopDebtors(loans: LoanWithBalance[], limit = 5): DebtorSlice[] {
   const byClient = new Map<string, DebtorSlice>();
 
   for (const l of loans) {
-    if (l.status === "paid" || l.balance_due <= 0) continue;
+    const balanceDue = Number(l.balance_due);
+    if (l.status === "paid" || balanceDue <= 0) continue;
     const existing = byClient.get(l.client_id);
     if (existing) {
-      existing.balance += l.balance_due;
+      existing.balance += balanceDue;
     } else {
-      byClient.set(l.client_id, { client: l.client_full_name, balance: l.balance_due });
+      byClient.set(l.client_id, { client: l.client_full_name, balance: balanceDue });
     }
   }
 

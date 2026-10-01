@@ -70,18 +70,23 @@ export async function getAllPayments(): Promise<Payment[]> {
   return data ?? [];
 }
 
-/** KPIs agrégés pour le dashboard, calculés à partir de v_loans_with_balance */
+/**
+ * KPIs agrégés pour le dashboard, calculés à partir de v_loans_with_balance.
+ * Les colonnes numériques Postgres (numeric) sont renvoyées en chaînes par
+ * Supabase — Number(...) est indispensable ici, sinon "+" concatène les
+ * montants en texte au lieu de les additionner.
+ */
 export function computeKpis(loans: LoanWithBalance[]) {
   const totalEncours = loans
     .filter((l) => l.status !== "paid")
-    .reduce((sum, l) => sum + l.balance_due, 0);
+    .reduce((sum, l) => sum + Number(l.balance_due), 0);
 
   const totalExigible = loans
     .filter((l) => l.is_overdue || l.is_due_today)
-    .reduce((sum, l) => sum + l.balance_due, 0);
+    .reduce((sum, l) => sum + Number(l.balance_due), 0);
 
-  const totalDue = loans.reduce((sum, l) => sum + l.total_due_amount, 0);
-  const totalPaid = loans.reduce((sum, l) => sum + l.total_paid, 0);
+  const totalDue = loans.reduce((sum, l) => sum + Number(l.total_due_amount), 0);
+  const totalPaid = loans.reduce((sum, l) => sum + Number(l.total_paid), 0);
   const tauxRecouvrement = totalDue > 0 ? (totalPaid / totalDue) * 100 : 0;
 
   return { totalEncours, totalExigible, tauxRecouvrement, totalDue, totalPaid };
