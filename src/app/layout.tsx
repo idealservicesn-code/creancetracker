@@ -75,7 +75,7 @@ export default async function RootLayout({
         {themeStyle ? <style dangerouslySetInnerHTML={{ __html: themeStyle }} /> : null}
         {user ? (
           <CurrencyProvider currency={organization?.currency ?? DEFAULT_CURRENCY}>
-            <div className="flex h-screen overflow-hidden">
+            <div className="flex h-screen flex-col overflow-hidden md:flex-row">
               <Sidebar organization={organization} profile={profile} />
               <main className="flex-1 overflow-y-auto">
                 {isPendingAdmin(profile) ? (
